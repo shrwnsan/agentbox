@@ -110,7 +110,7 @@ build_image() {
     if docker build \
         --build-arg USER_ID="${user_id}" \
         --build-arg GROUP_ID="${group_id}" \
-        --build-arg USERNAME="claude" \
+        --build-arg USERNAME="agent" \
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
@@ -201,7 +201,7 @@ validate_dir_path() {
     fi
 
     if [[ "$dir_realpath" == "$project_realpath" ]]; then
-        log_warning "Skipping duplicate: $dir (already mounted as /workspace)"
+        log_warning "Skipping duplicate: $dir (already mounted as project directory)"
         return 0  # Not an error, just skip
     fi
 
@@ -230,9 +230,8 @@ mount_additional_dirs() {
     fi
 
     for extra_dir in "${extra_dirs[@]}"; do
-        local dir_name=$(basename "$extra_dir")
-        mount_opts_ref+=(-v "$extra_dir:/${dir_name}:z")
-        log_info "Mounting additional directory: $extra_dir -> /${dir_name}"
+        mount_opts_ref+=(-v "$extra_dir:$extra_dir:z")
+        log_info "Mounting additional directory: $extra_dir"
     done
 }
 
@@ -263,9 +262,10 @@ run_container() {
         log_success "Starting container for: $PROJECT_NAME"
     fi
 
-    # Prepare mount options
+    # Prepare mount options - mount project at its real host path
     local mount_opts=(
-        -v "$PROJECT_DIR:/workspace:z"
+        -v "$PROJECT_DIR:$PROJECT_DIR:z"
+        --env "PROJECT_DIR=$PROJECT_DIR"
     )
 
     mount_additional_dirs mount_opts "${extra_dirs_to_mount[@]}"
@@ -278,7 +278,7 @@ run_container() {
     # Mount dedicated AgentBox SSH directory
     local agentbox_ssh="${HOME}/.agentbox/ssh"
     if [[ -d "${agentbox_ssh}" ]]; then
-        mount_opts+=(-v "${agentbox_ssh}:/home/claude/.ssh:rw")
+        mount_opts+=(-v "${agentbox_ssh}:/home/agent/.ssh:rw")
         log_info "AgentBox SSH directory mounted (read-write)"
     else
         log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
@@ -289,10 +289,10 @@ run_container() {
     mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
 
     mount_opts+=(
-        -v "${cache_dir}/npm:/home/claude/.npm"
-        -v "${cache_dir}/pip:/home/claude/.cache/pip"
-        -v "${cache_dir}/maven:/home/claude/.m2"
-        -v "${cache_dir}/gradle:/home/claude/.gradle"
+        -v "${cache_dir}/npm:/home/agent/.npm"
+        -v "${cache_dir}/pip:/home/agent/.cache/pip"
+        -v "${cache_dir}/maven:/home/agent/.m2"
+        -v "${cache_dir}/gradle:/home/agent/.gradle"
     )
 
     # Mount per-project persistent data
@@ -302,8 +302,8 @@ run_container() {
 
     # Mount history directory (not individual files to avoid file locking issues)
     mount_opts+=(
-        -v "${history_dir}:/home/claude/.shell_history"
-        --env "HISTFILE=/home/claude/.shell_history/zsh_history"
+        -v "${history_dir}:/home/agent/.shell_history"
+        --env "HISTFILE=/home/agent/.shell_history/zsh_history"
     )
 
     # Use Docker named volume for Claude config (like Anthropic's devcontainer)
@@ -335,19 +335,15 @@ run_container() {
         fi
     fi
 
-    mount_opts+=(-v "${claude_volume_name}:/home/claude/.claude")
+    mount_opts+=(-v "${claude_volume_name}:/home/agent/.claude")
 
     # Set Claude config directory environment variable
-    mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/claude/.claude")
+    mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/agent/.claude")
 
     log_info "Claude CLI configuration mounted"
 
-    # Mount project directory path info for direnv approval translation
+    # Mount host direnv approvals for translation if project has .envrc
     if [[ -f "$PROJECT_DIR/.envrc" ]]; then
-        # Pass the host project directory path as an environment variable
-        mount_opts+=(--env "HOST_PROJECT_DIR=$PROJECT_DIR")
-
-        # Mount host direnv approvals to check if this .envrc is already approved
         local host_direnv_allow="${HOME}/.local/share/direnv/allow"
         if [[ -d "$host_direnv_allow" ]]; then
             mount_opts+=(-v "${host_direnv_allow}:/tmp/host_direnv_allow:ro")
@@ -373,11 +369,16 @@ run_container() {
         container_cmd=(zsh -c "source ~/.zshrc && exec $claude_cmd")
     fi
 
-    # Check for .env file in project directory and add to docker args
     local env_file_args=()
+    local agentbox_env="${HOME}/.agentbox/.env"
+    if [[ -f "$agentbox_env" ]]; then
+        env_file_args+=(--env-file "$agentbox_env")
+        log_info "Global .env loaded from ~/.agentbox/.env"
+    fi
+
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         env_file_args+=(--env-file "$PROJECT_DIR/.env")
-        log_info ".env file found and will be loaded into container"
+        log_info "Project .env loaded from $PROJECT_DIR/.env"
     fi
 
     # Build port forwarding arguments
@@ -404,7 +405,7 @@ run_container() {
         "${port_args[@]}" \
         "${mount_opts[@]}" \
         "${env_file_args[@]}" \
-        -w /workspace \
+        -w "$PROJECT_DIR" \
         --init \
         "$IMAGE_NAME" \
         "${container_cmd[@]}"
@@ -449,8 +450,7 @@ Examples:
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
 
-Additional directories are mounted using their folder names (e.g., /foo, /bar).
-The current directory is always mounted as /workspace.
+All directories are mounted at their full host paths for symlink/path compatibility.
 EOF
 }
 

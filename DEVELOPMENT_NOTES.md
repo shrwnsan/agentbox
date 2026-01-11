@@ -26,7 +26,7 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 ## Implementation Details
 
 ### File Responsibilities
-- `Dockerfile`: Multi-stage build with all language toolchains. Uses `USER claude` (UID 1000)
+- `Dockerfile`: Multi-stage build with all language toolchains. Uses `USER agent` (UID 1000)
 - `entrypoint.sh`: Minimal - only sets PATH and creates Python venvs
 - `agentbox`: Main logic - rebuild detection, container lifecycle, mount management
 
@@ -44,16 +44,16 @@ After each successful rebuild, `docker image prune -f --filter "label=agentbox.v
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount, always current directory)
-/<directory_name>       # Additional directories (via --add-dir flag, using folder basenames e.g., /foo, /bar)
-/home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
-/home/claude/.gitconfig # Git config (read-only)
-/home/claude/.npm       # NPM cache
-/home/claude/.cache/pip # Pip cache
-/home/claude/.m2        # Maven cache
-/home/claude/.gradle    # Gradle cache
-/home/claude/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
-/home/claude/.claude    # Claude config (Docker volume)
+$PROJECT_DIR            # Project directory (mounted at full host path)
+<additional_dirs>       # Additional directories via --add-dir (also mounted at full host paths)
+/home/agent/.ssh        # SSH keys from ~/.agentbox/ssh/
+/home/agent/.gitconfig  # Git config (read-only)
+/home/agent/.npm        # NPM cache
+/home/agent/.cache/pip  # Pip cache
+/home/agent/.m2         # Maven cache
+/home/agent/.gradle     # Gradle cache
+/home/agent/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
+/home/agent/.claude     # Claude config (Docker volume)
 ```
 
 ## Testing Status

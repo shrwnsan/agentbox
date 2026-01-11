@@ -68,7 +68,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Create non-root user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-ARG USERNAME=claude
+ARG USERNAME=agent
 
 RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
     useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/zsh ${USERNAME} && \
@@ -116,7 +116,7 @@ RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
     echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
     echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
     bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
-        sdk install java 21.0.8-tem && \
+        sdk install java 21.0.9-tem && \
         sdk install gradle"
 
 # Setup Python tools
@@ -186,18 +186,12 @@ set -g status-left '#[fg=green]#H '
 set -g status-right '#[fg=yellow]%Y-%m-%d %H:%M'
 EOF
 
-# Create workspace directory
-RUN mkdir -p /home/${USERNAME}/workspace
-
 # Switch back to root for entrypoint setup
 USER root
 
 # Copy entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Set working directory
-WORKDIR /workspace
 
 # Set the user for runtime
 USER ${USERNAME}
