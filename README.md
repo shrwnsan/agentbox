@@ -2,19 +2,15 @@
 
 # AgentBox
 
-A Docker-based development environment for running Claude CLI in a more safe, isolated fashion. This makes it less dangerous to use YOLO mode (`--dangerously-skip-permissions`), which is, in my opinion, the only way to use AI agents.
+A Docker-based development environment for running agentic coding tools in a more safe, isolated fashion. This makes it less dangerous to give your agent full permissions (YOLO mode / `--dangerously-skip-permissions`), which is, in my opinion, the only way to use AI agents.
 
 ## Features
 
-- **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running Claude without a container.
+- **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running your tool without a container.
 - **Multi-Tool Support**: Choose between Claude Code (default) or OpenCode via `--tool` flag or `AGENTBOX_TOOL` env var
-- **Multi-Directory Support**: Mount additional project directories for cross-project development
 - **Unified Development Environment**: Single Docker image with Python, Node.js, Java, and Shell support
-- **Automatic Rebuilds**: Detects changes to Dockerfile/entrypoint and rebuilds automatically
-- **Per-Project Isolation**: Each project directory gets its own isolated container environment
-- **Persistent Data**: Package caches and shell history persist between sessions
-- **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
-- **SSH Support**: Dedicated SSH directory for secure Git operations
+- **Low-Maintenance Philosophy**: Always uses latest LTS tool versions, rebuilds container automatically when necessary
+- **Isolated SSH**: Dedicated SSH directory for secure Git operations
 
 ## Requirements
 
@@ -100,7 +96,7 @@ The `gh` tool is included in the image and can be used for all GitHub operations
 - Create a .env file at the root of your project repository with entry `GH_TOKEN=<token>`
 - Add some instructions to the CLAUDE.md file, telling it to use the `gh` tool for Git operations. You can see a slightly more complicated example in this repo, there is a sub-agent for git operations in .claude/agents and instructions in CLAUDE.md to remember to use agents.
 
-Note that Claude will convert your git remotes to https, ssh remotes don't work with tokens.
+You or your agent should convert ssh git remotes to https, ssh remotes don't work with tokens.
 
 ### GitLab
  The `glab` tool is included in the image. You can use it with a GitLab token for API operations, but not for git operations as far as I know. So for GitLab I recommend the SSH configuration detailed below.
