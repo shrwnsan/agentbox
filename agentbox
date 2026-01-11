@@ -325,13 +325,18 @@ run_container() {
                 -v "${claude_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
-                sh -c "cp -r /source/* /dest/ 2>/dev/null; chown -R ${uid}:${gid} /dest"
+                sh -c "
+                    cd /source &&
+                    find . -maxdepth 1 ! -name '.' -exec cp -rL -- '{}' /dest/ \; 2>/dev/null
+                    mkdir -p /dest/plugins/marketplaces 2>/dev/null || true
+                    chown -R ${uid}:${gid} /dest
+                "
         else
             docker run --rm \
                 -v "${claude_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
-                chown -R ${uid}:${gid} /dest
+                sh -c "mkdir -p /dest/plugins/marketplaces; chown -R ${uid}:${gid} /dest"
         fi
     fi
 
