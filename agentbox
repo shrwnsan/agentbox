@@ -363,7 +363,12 @@ run_container() {
         fi
 
         if [[ ${#cmd_args[@]} -gt 0 ]]; then
-            tool_cmd="$tool_cmd ${cmd_args[*]}"
+            # Properly escape each argument to preserve quoting
+            local escaped_args=""
+            for arg in "${cmd_args[@]}"; do
+                escaped_args+=" $(printf '%q' "$arg")"
+            done
+            tool_cmd="$tool_cmd$escaped_args"
         fi
         container_cmd=(zsh -c "source ~/.zshrc && exec $tool_cmd")
     fi
