@@ -31,7 +31,11 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 - `agentbox`: Main logic - rebuild detection, container lifecycle, mount management
 
 ### Rebuild Detection
-Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Compares on each run to trigger automatic rebuilds.
+Automatic rebuilds are triggered by:
+1. **File changes**: SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Compares on each run.
+2. **Time-based**: If image is older than 48 hours, rebuild automatically to get latest tool versions (Claude Code/OpenCode).
+
+This ensures tools stay updated without manual intervention or version checking overhead.
 
 ### Container Lifecycle
 1. Check Docker daemon

@@ -192,7 +192,9 @@ agentbox npm test
 agentbox --rebuild
 ```
 
-The image automatically rebuilds when the Dockerfile or entrypoint.sh changes
+The image automatically rebuilds when:
+- Dockerfile or entrypoint.sh changes
+- Image is older than 48 hours (to get latest tool versions)
 
 ## Tool / Dependency Versions
 The Dockerfile is configured to pull the latest stable version of each tool (NVM, GitLab CLI, etc.) during the build process. This makes maintenance easy and ensures that we always use current software. It also means that rebuilding the Docker image may automatically result in newer versions of tools being installed, which could introduce unexpected behavior or breaking changes. If you require specific tool versions, consider pinning them in the Dockerfile.
