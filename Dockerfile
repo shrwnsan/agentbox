@@ -196,9 +196,10 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Set the user for runtime
 USER ${USERNAME}
 
-# Install Claude and OpenCode as last step
-# Changing the ARG (via --build-arg) will invalidate the cache for the
-# following steps and consequently install the latest Claude version
+# Using BUILD_TIMESTAMP as a build arg that changes on every invocation invalidates
+# Docker's cache for this layer and following layers, forcing reinstall even when
+# Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
+# of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
 RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
     zsh -i -c 'which claude && claude --version'
