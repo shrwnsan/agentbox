@@ -196,15 +196,15 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Set the user for runtime
 USER ${USERNAME}
 
-# Install Claude as last step
+# Install Claude and OpenCode as last step
 # Changing the ARG (via --build-arg) will invalidate the cache for the
 # following steps and consequently install the latest Claude version
 ARG BUILD_TIMESTAMP=unknown
+RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
+    zsh -i -c 'which claude && claude --version'
+
 RUN bash -c "source $NVM_DIR/nvm.sh && \
-    npm install -g \
-        @anthropic-ai/claude-code opencode-ai && \
-    # Verify both tools installed correctly
-    which claude && claude --version && \
+    npm install -g opencode-ai && \
     which opencode && opencode --version"
 
 # Entrypoint
