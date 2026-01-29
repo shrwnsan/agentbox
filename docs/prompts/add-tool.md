@@ -48,7 +48,11 @@ Some tools follow XDG conventions and need two mounts:
 
 ### entrypoint.sh
 
-Find the startup banner section that displays tool versions based on the `$TOOL` environment variable. Add an `elif` clause to display the new tool's version.
+Make these changes:
+
+**PATH configuration**: If the tool installs to a custom bin directory (not `~/.local/bin`), add it to the PATH export at the top of the file.
+
+**Version display**: Find the startup banner section that displays tool versions based on the `$TOOL` environment variable. Add an `elif` clause to display the new tool's version.
 
 ### README.md
 

@@ -203,9 +203,8 @@ ARG BUILD_TIMESTAMP=unknown
 RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
     zsh -i -c 'which claude && claude --version'
 
-RUN bash -c "source $NVM_DIR/nvm.sh && \
-    npm install -g opencode-ai && \
-    which opencode && opencode --version"
+RUN curl -fsSL https://opencode.ai/install | bash && \
+    zsh -i -c 'which opencode && opencode --version'
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
