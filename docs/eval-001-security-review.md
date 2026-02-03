@@ -2,6 +2,7 @@
 
 **Reviewer:** Claude Code (GLM 4.7)
 **Date:** 2026-01-07
+**Last Updated:** 2026-02-03
 **Scope:** Core AgentBox codebase (agentbox, Dockerfile, entrypoint.sh, GitHub workflows)
 
 ---
@@ -76,6 +77,9 @@ claude_args: '--allowed-tools "Bash(gh pr comment ${{ github.event.pull_request.
 **Issue:** Project recommends storing `GH_TOKEN` in `.env` file at project root, but `.env` is not in `.gitignore`. If committed, secrets are exposed to repository history.
 
 **Impact:** Credential leakage if `.env` is accidentally committed.
+
+**Status:** ✅ **RESOLVED** (2026-02-03)
+- `.env`, `.env.local`, `.env.*.local` added to `.gitignore:27-29`
 
 **Remediation:**
 1. Add `.env` to project `.gitignore` template
