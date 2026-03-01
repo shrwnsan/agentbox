@@ -324,6 +324,9 @@ run_container() {
         --env "HISTFILE=/home/agent/.shell_history/zsh_history"
     )
 
+    # Pass host home to container for display path normalization
+    mount_opts+=(--env "HOST_HOME=${HOME}")
+
     if [[ "$tool" == "opencode" ]]; then
         local opencode_config_dir="${HOME}/.config/opencode"
         local opencode_auth_dir="${HOME}/.local/share/opencode"
@@ -355,7 +358,6 @@ run_container() {
         mount_opts+=(
             -v "${claude_dir}:/home/agent/.claude"
             --env "CLAUDE_CONFIG_DIR=/home/agent/.claude"
-            --env "HOST_HOME=${HOME}"
         )
 
         log_info "Claude CLI configuration mounted"
@@ -413,7 +415,8 @@ run_container() {
 
         if [[ -f "$PROJECT_DIR/.env" ]]; then
             env_file_args+=(--env-file "$PROJECT_DIR/.env")
-            log_info "Project .env loaded from $PROJECT_DIR/.env"
+            local display_project_dir="${PROJECT_DIR/#$HOME/\~}"
+            log_info "Project .env loaded from ${display_project_dir}/.env"
         fi
     else
         log_info ".env files not loaded (--ignore-dot-env flag set)"
