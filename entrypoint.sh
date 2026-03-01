@@ -7,7 +7,7 @@ export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 if [ -n "${HOST_HOME:-}" ] && [ "$HOST_HOME" != "$HOME" ] && [ ! -e "$HOST_HOME/.claude" ]; then
     sudo mkdir -p "$HOST_HOME" 2>/dev/null || true
     sudo ln -s "$HOME/.claude" "$HOST_HOME/.claude" 2>/dev/null && \
-        echo "✅ Symlinked $HOST_HOME/.claude -> $HOME/.claude for plugin path resolution"
+        echo "✅ Symlinked ~/.claude -> $HOME/.claude for plugin path resolution"
 fi
 
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
@@ -67,9 +67,14 @@ if [ -t 0 ]; then
 fi
 
 if [ -t 0 ] && [ -t 1 ]; then
+    # Display path with ~ instead of home directory for privacy
+    display_dir="${PROJECT_DIR:-unknown}"
+    if [ -n "$HOST_HOME" ] && [[ "$display_dir" == "$HOST_HOME"* ]]; then
+        display_dir="~${display_dir#$HOST_HOME}"
+    fi
     echo "🤖 AgentBox Development Environment"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📁 Project Directory: ${PROJECT_DIR:-unknown}"
+    echo "📁 Project Directory: $display_dir"
     echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(command -v java >/dev/null 2>&1 && java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'excluded (--no-java)')"
