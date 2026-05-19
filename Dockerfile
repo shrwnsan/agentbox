@@ -21,6 +21,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
+ENV PNPM_HOME="/home/agent/.local/share/pnpm"
+ENV PATH="/home/agent/.local/share/pnpm/bin:/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Install system dependencies and essential tools
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -170,6 +172,10 @@ if [[ -n "$PS1" ]] && command -v stty >/dev/null; then
   _update_size
 fi
 EOF
+
+# Ensure pnpm global bin is in PATH (needed after zshrc/nvm resets it)
+RUN echo 'export PATH="$HOME/.local/share/pnpm/bin:$PATH"' >> ~/.zshrc && \
+    echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.zshrc
 
 # Simple traditional Unix-style prompt (opt-in: AGENTBOX_SIMPLE_PROMPT=true)
 RUN if [ "$AGENTBOX_SIMPLE_PROMPT" = "true" ]; then \

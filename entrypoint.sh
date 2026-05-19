@@ -2,7 +2,7 @@
 
 set -e
 
-export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
+export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.local/share/pnpm/bin:$PATH"
 
 if [ -n "${HOST_HOME:-}" ] && [ "$HOST_HOME" != "$HOME" ] && [ ! -e "$HOST_HOME/.claude" ]; then
     sudo mkdir -p "$HOST_HOME" 2>/dev/null || true

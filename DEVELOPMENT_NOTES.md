@@ -123,6 +123,11 @@ Current image is large (~2GB) due to multiple language toolchains. Could optimiz
 - Optional language support via build args
 - Better layer caching strategies
 
+### pi-answer Workspace Protocol Bug
+- **Root Cause**: `pi-answer@0.1.6` publishes `@siddr/pi-shared-qna@workspace:^` in its dependencies — a pnpm monorepo protocol that doesn't resolve in global installs. The shared package exists on npm (`@siddr/pi-shared-qna@0.1.5`), so this is a publishing oversight.
+- **Workaround**: Remove `"npm:pi-answer"` from Pi packages in `~/.pi/agent/settings.json`. Pi's `npmCommand` is set to `["pnpm"]` to support workspace-protocol packages when this is fixed upstream.
+- **Upstream**: https://github.com/sids/pi-extensions
+
 ## Development Philosophy
 
 1. **Simplicity First**: Resist feature creep. The value is in being simpler than ClaudeBox.
