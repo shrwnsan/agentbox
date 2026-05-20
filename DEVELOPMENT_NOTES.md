@@ -86,13 +86,15 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 /home/agent/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
 /home/agent/.agents     # Centralized agents directory (skills, prompts, etc.)
 /home/agent/.claude     # Claude config
+/home/agent/.pi         # Pi config and packages
 /home/agent/.config/opencode  # OpenCode config
 /home/agent/.local/share/opencode  # OpenCode auth
+/home/agent/.local/share/pnpm  # pnpm global store
 ```
 
 ## Testing Status
 - Basic functionality verified (help command, shell mode)
-- Full Docker build/run cycle needs real environment testing
+- Full Docker build/run cycle verified for Claude, OpenCode, and Pi tools
 - Multi-project isolation designed but not stress-tested
 - SSH operations need testing with actual Git repositories
 
