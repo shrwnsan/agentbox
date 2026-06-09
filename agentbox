@@ -80,12 +80,23 @@ get_container_name() {
 }
 
 
-# Check if image needs rebuild
-needs_rebuild() {
-    # Calculate current Dockerfile and entrypoint hashes
+# Calculate combined hash including build-affecting args
+calculate_combined_hash() {
+    local include_java="$1"
+    local include_opencode="$2"
+    local include_pi="$3"
+    local cc_channel="$4"
+    local simple_prompt="$5"
+
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local config_hash=$(echo -n "${include_java}-${include_opencode}-${include_pi}-${cc_channel}-${simple_prompt}" | sha256sum | cut -d' ' -f1)
+    echo "${dockerfile_hash}-${entrypoint_hash}-${config_hash}"
+}
+
+# Check if image needs rebuild
+needs_rebuild() {
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_pi" "$cc_channel" "$simple_prompt")
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -106,9 +117,7 @@ needs_rebuild() {
 
 # Build Docker image
 build_image() {
-    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
-    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_pi" "$cc_channel" "$simple_prompt")
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
