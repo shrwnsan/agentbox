@@ -4,17 +4,8 @@ FROM debian:trixie
 # Optional Java toolchain (default: on for compatibility)
 ARG AGENTBOX_INCLUDE_JAVA=true
 
-# Claude Code channel (stable or latest)
-ARG AGENTBOX_CC_CHANNEL=stable
-
 # Include OpenCode (default: on)
 ARG AGENTBOX_INCLUDE_OPENCODE=true
-
-# Include Pi (default: off)
-ARG AGENTBOX_INCLUDE_PI=false
-
-# Simple traditional Unix-style prompt (default: off for backwards compatibility)
-ARG AGENTBOX_SIMPLE_PROMPT=false
 
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -177,11 +168,6 @@ EOF
 RUN echo 'export PATH="$HOME/.local/share/pnpm/bin:$PATH"' >> ~/.zshrc && \
     echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.zshrc
 
-# Simple traditional Unix-style prompt (opt-in: AGENTBOX_SIMPLE_PROMPT=true)
-RUN if [ "$AGENTBOX_SIMPLE_PROMPT" = "true" ]; then \
-    echo 'PROMPT='"'"'%n@%m:%~ $ '"'"'' >> ~/.zshrc; \
-    fi
-
 # Configure git
 RUN git config --global init.defaultBranch main && \
     git config --global pull.rebase false
@@ -229,19 +215,17 @@ USER ${USERNAME}
 # Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
 # of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s ${AGENTBOX_CC_CHANNEL} && \
+RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
     zsh -i -c 'which claude && claude --version'
 
 RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
         curl -fsSL https://opencode.ai/install | bash && \
         zsh -i -c 'which opencode && opencode --version'; \
     fi
-RUN if [ "$AGENTBOX_INCLUDE_PI" = "true" ]; then \
-        export NVM_DIR="/home/agent/.nvm" && \
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
-        npm install -g @mariozechner/pi-coding-agent && \
-        zsh -i -c 'which pi && pi --version'; \
-    fi
+RUN export NVM_DIR="/home/${USERNAME}/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    npm install -g @earendil-works/pi-coding-agent && \
+    zsh -i -c 'which pi && pi --version'
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
