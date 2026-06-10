@@ -585,6 +585,14 @@ ssh_setup() {
 
 # Main execution
 main() {
+    # Source agentbox env file so build arg defaults reflect user config
+    local agentbox_env="${HOME}/.agentbox/.env"
+    if [[ -f "$agentbox_env" ]]; then
+        set -a
+        source "$agentbox_env"
+        set +a
+    fi
+
     # Parse arguments
     local force_rebuild=false
     local shell_mode=false
