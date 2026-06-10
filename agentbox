@@ -84,16 +84,17 @@ get_container_name() {
 calculate_combined_hash() {
     local include_java="$1"
     local include_opencode="$2"
+    local include_gitlab="$3"
 
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local config_hash=$(echo -n "${include_java}-${include_opencode}" | sha256sum | cut -d' ' -f1)
+    local config_hash=$(echo -n "${include_java}-${include_opencode}-${include_gitlab}" | sha256sum | cut -d' ' -f1)
     echo "${dockerfile_hash}-${entrypoint_hash}-${config_hash}"
 }
 
 # Check if image needs rebuild
 needs_rebuild() {
-    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode")
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_gitlab")
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -114,7 +115,7 @@ needs_rebuild() {
 
 # Build Docker image
 build_image() {
-    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode")
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_gitlab")
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -131,6 +132,7 @@ build_image() {
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
         --build-arg AGENTBOX_INCLUDE_JAVA="${include_java}" \
         --build-arg AGENTBOX_INCLUDE_OPENCODE="${include_opencode}" \
+        --build-arg AGENTBOX_INCLUDE_GITLAB="${include_gitlab}" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=${build_timestamp}" \
@@ -511,6 +513,7 @@ Options:
     --ignore-dot-env        Do not load .env files as environment variables (still mounted)
     --no-java               Exclude Java toolchain for smaller image (default: included)
     --no-opencode           Exclude OpenCode installation for smaller image (default: included)
+    --no-gitlab             Exclude GitLab CLI installation for smaller image (default: included)
 
 Commands:
     shell [--admin]         Start interactive shell instead of Claude CLI
@@ -585,6 +588,14 @@ ssh_setup() {
 
 # Main execution
 main() {
+    # Source agentbox env file so build arg defaults reflect user config
+    local agentbox_env="${HOME}/.agentbox/.env"
+    if [[ -f "$agentbox_env" ]]; then
+        set -a
+        source "$agentbox_env"
+        set +a
+    fi
+
     # Parse arguments
     local force_rebuild=false
     local shell_mode=false
@@ -595,6 +606,7 @@ main() {
     local tool="${AGENTBOX_TOOL:-claude}"
     local include_java="${AGENTBOX_INCLUDE_JAVA:-true}"
     local include_opencode="${AGENTBOX_INCLUDE_OPENCODE:-true}"
+    local include_gitlab="${AGENTBOX_INCLUDE_GITLAB:-true}"
     local ignore_dot_env="${AGENTBOX_IGNORE_DOT_ENV:-false}"
 
     while [[ $# -gt 0 ]]; do
@@ -644,6 +656,10 @@ main() {
                 ;;
             --no-opencode)
                 include_opencode=false
+                shift
+                ;;
+            --no-gitlab)
+                include_gitlab=false
                 shift
                 ;;
             shell)
