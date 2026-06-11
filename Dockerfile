@@ -1,11 +1,18 @@
 # AgentBox - Simplified multi-language development environment for Claude
 FROM debian:trixie
 
+ARG AGENTBOX_INCLUDE_JAVA=true
+ARG AGENTBOX_INCLUDE_OPENCODE=true
+ARG AGENTBOX_INCLUDE_GITLAB=true
+ARG AGENTBOX_INCLUDE_DOCKER_CLI=true
+
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
+ENV PNPM_HOME="/home/agent/.local/share/pnpm"
+ENV PATH="/home/agent/.local/share/pnpm/bin:/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Install system dependencies and essential tools
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -33,8 +40,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Python build dependencies
         python3-dev python3-pip python3-venv \
         libssl-dev libffi-dev \
-        # Java dependencies
-        default-jdk maven gradle \
+        # Java dependencies (conditional)
+        $(if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then echo "default-jdk maven gradle"; fi) \
         # Search tools
         ripgrep fd-find && \
     # Setup locale
@@ -55,27 +62,31 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install GitLab CLI
-RUN ARCH=$(dpkg --print-architecture) && \
-    GLAB_VERSION=$(curl -sL "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
-    echo "Installing glab version ${GLAB_VERSION} for ${ARCH}" && \
-    curl -fsSL -o /tmp/glab.deb \
-        "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
-    dpkg -i /tmp/glab.deb || apt-get install -f -y && \
-    rm /tmp/glab.deb && \
-    glab --version
+# Install GitLab CLI (conditional)
+RUN if [ "$AGENTBOX_INCLUDE_GITLAB" = "true" ]; then \
+        ARCH=$(dpkg --print-architecture) && \
+        GLAB_VERSION=$(curl -sL "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
+        echo "Installing glab version ${GLAB_VERSION} for ${ARCH}" && \
+        curl -fsSL -o /tmp/glab.deb \
+            "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
+        dpkg -i /tmp/glab.deb || apt-get install -f -y && \
+        rm /tmp/glab.deb && \
+        glab --version; \
+    fi
 
-# Install Docker CLI
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | \
-    gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
-    chmod 644 /usr/share/keyrings/docker-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
-    $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
-    apt-get update && \
-    apt-get install -y docker-ce-cli && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* && \
-    docker --version
+# Install Docker CLI (conditional)
+RUN if [ "$AGENTBOX_INCLUDE_DOCKER_CLI" = "true" ]; then \
+        curl -fsSL https://download.docker.com/linux/debian/gpg | \
+        gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+        chmod 644 /usr/share/keyrings/docker-archive-keyring.gpg && \
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
+        $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+        apt-get update && \
+        apt-get install -y docker-ce-cli && \
+        apt-get clean && \
+        rm -rf /var/lib/apt/lists/* && \
+        docker --version; \
+    fi
 
 # Create non-root user
 ARG USER_ID=1000
@@ -123,13 +134,15 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         yarn \
         pnpm"
 
-# Install SDKMAN for Java toolchain management
-RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
-    bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
-        sdk install java 21.0.9-tem && \
-        sdk install gradle"
+# Install SDKMAN for Java toolchain management (conditional)
+RUN if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then \
+        curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
+        bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
+            sdk install java 21.0.9-tem && \
+            sdk install gradle"; \
+    fi
 
 # Setup Python tools
 RUN /home/${USERNAME}/.local/bin/uv tool install black && \
@@ -165,6 +178,10 @@ if [[ -n "$PS1" ]] && command -v stty >/dev/null; then
   _update_size
 fi
 EOF
+
+# Ensure pnpm global bin is in PATH (needed after zshrc/nvm resets it)
+RUN echo 'export PATH="$HOME/.local/share/pnpm/bin:$PATH"' >> ~/.zshrc && \
+    echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> ~/.zshrc
 
 # Configure git
 RUN git config --global init.defaultBranch main && \
@@ -216,8 +233,10 @@ ARG BUILD_TIMESTAMP=unknown
 RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
     zsh -i -c 'which claude && claude --version'
 
-RUN curl -fsSL https://opencode.ai/install | bash && \
-    zsh -i -c 'which opencode && opencode --version'
+RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
+        curl -fsSL https://opencode.ai/install | bash && \
+        zsh -i -c 'which opencode && opencode --version'; \
+    fi
 
 RUN export NVM_DIR="/home/${USERNAME}/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \

@@ -86,12 +86,22 @@ get_container_name() {
 }
 
 
-# Check if image needs rebuild
-needs_rebuild() {
-    # Calculate current Dockerfile and entrypoint hashes
+# Calculate combined hash including build-affecting args
+calculate_combined_hash() {
+    local include_java="$1"
+    local include_opencode="$2"
+    local include_gitlab="$3"
+    local include_docker_cli="$4"
+
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local config_hash=$(echo -n "${include_java}-${include_opencode}-${include_gitlab}-${include_docker_cli}" | sha256sum | cut -d' ' -f1)
+    echo "${dockerfile_hash}-${entrypoint_hash}-${config_hash}"
+}
+
+# Check if image needs rebuild
+needs_rebuild() {
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_gitlab" "$include_docker_cli")
 
     # Check if image exists
     if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -112,9 +122,7 @@ needs_rebuild() {
 
 # Build Docker image
 build_image() {
-    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
-    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local combined_hash=$(calculate_combined_hash "$include_java" "$include_opencode" "$include_gitlab" "$include_docker_cli")
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -129,6 +137,10 @@ build_image() {
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="agent" \
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
+        --build-arg AGENTBOX_INCLUDE_JAVA="${include_java}" \
+        --build-arg AGENTBOX_INCLUDE_OPENCODE="${include_opencode}" \
+        --build-arg AGENTBOX_INCLUDE_GITLAB="${include_gitlab}" \
+        --build-arg AGENTBOX_INCLUDE_DOCKER_CLI="${include_docker_cli}" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=${build_timestamp}" \
@@ -346,6 +358,8 @@ run_container() {
         --env "HISTFILE=/home/agent/.shell_history/zsh_history"
     )
 
+    mount_opts+=(--env "HOST_HOME=${HOME}")
+
     if [[ "$tool" == "opencode" ]]; then
         local opencode_config_dir="${HOME}/.config/opencode"
         local opencode_auth_dir="${HOME}/.local/share/opencode"
@@ -377,7 +391,6 @@ run_container() {
         mount_opts+=(
             -v "${claude_dir}:/home/agent/.claude"
             --env "CLAUDE_CONFIG_DIR=/home/agent/.claude"
-            --env "HOST_HOME=${HOME}"
         )
 
         log_info "Claude CLI configuration mounted"
@@ -388,6 +401,13 @@ run_container() {
     if [[ -d "$agents_dir" ]]; then
         mount_opts+=(-v "${agents_dir}:/home/agent/.agents")
         log_info "Agents directory mounted"
+    fi
+
+    # Mount agent-browser data (sessions, config)
+    local agent_browser_dir="${HOME}/.agent-browser"
+    if [[ -d "$agent_browser_dir" ]]; then
+        mount_opts+=(-v "${agent_browser_dir}:/home/agent/.agent-browser")
+        log_info "Agent-browser data mounted"
     fi
 
     # Set tool environment variable
@@ -442,7 +462,8 @@ run_container() {
 
         if [[ -f "$PROJECT_DIR/.env" ]]; then
             env_file_args+=(--env-file "$PROJECT_DIR/.env")
-            log_info "Project .env loaded from $PROJECT_DIR/.env"
+            local display_project_dir="${PROJECT_DIR/#$HOME/\~}"
+            log_info "Project .env loaded from ${display_project_dir}/.env"
         fi
     else
         log_info ".env files not loaded (--ignore-dot-env flag set)"
@@ -530,6 +551,10 @@ Options:
     --add-dir DIR               Mount additional directory (can be used multiple times)
     --ignore-dot-env            Do not load .env files as environment variables (still mounted)
     --dangerously-mount-docker  Mount Docker socket (requires Docker Desktop)
+    --no-java                   Exclude Java toolchain for smaller image (default: included)
+    --no-opencode               Exclude OpenCode installation for smaller image (default: included)
+    --no-gitlab                 Exclude GitLab CLI installation for smaller image (default: included)
+    --no-docker-cli             Exclude Docker CLI installation for smaller image (default: included)
 
 Commands:
     shell [--admin]             Start interactive shell instead of Claude CLI
@@ -605,6 +630,14 @@ ssh_setup() {
 
 # Main execution
 main() {
+    # Source agentbox env file so build arg defaults reflect user config
+    local agentbox_env="${HOME}/.agentbox/.env"
+    if [[ -f "$agentbox_env" ]]; then
+        set -a
+        source "$agentbox_env"
+        set +a
+    fi
+
     # Parse arguments
     local force_rebuild=false
     local shell_mode=false
@@ -615,7 +648,11 @@ main() {
     local extra_dirs=()
     local env_vars=()
     local tool="${AGENTBOX_TOOL:-claude}"
-    local ignore_dot_env=false
+    local include_java="${AGENTBOX_INCLUDE_JAVA:-true}"
+    local include_opencode="${AGENTBOX_INCLUDE_OPENCODE:-true}"
+    local include_gitlab="${AGENTBOX_INCLUDE_GITLAB:-true}"
+    local include_docker_cli="${AGENTBOX_INCLUDE_DOCKER_CLI:-true}"
+    local ignore_dot_env="${AGENTBOX_IGNORE_DOT_ENV:-false}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -671,6 +708,22 @@ main() {
                 ignore_dot_env=true
                 shift
                 ;;
+            --no-java)
+                include_java=false
+                shift
+                ;;
+            --no-opencode)
+                include_opencode=false
+                shift
+                ;;
+            --no-gitlab)
+                include_gitlab=false
+                shift
+                ;;
+            --no-docker-cli)
+                include_docker_cli=false
+                shift
+                ;;
             shell)
                 shell_mode=true
                 shift
@@ -698,6 +751,10 @@ main() {
     if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "pi" ]]; then
         log_error "Invalid tool: $tool (must be 'claude', 'opencode', or 'pi')"
         exit 1
+    fi
+
+    if [[ "$tool" == "opencode" ]]; then
+        include_opencode=true
     fi
 
     # Check runtime

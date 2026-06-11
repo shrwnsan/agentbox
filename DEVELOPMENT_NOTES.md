@@ -88,7 +88,11 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 /home/agent/.claude     # Claude config
 /home/agent/.config/opencode  # OpenCode config
 /home/agent/.local/share/opencode  # OpenCode auth
+/home/agent/.local/share/pnpm  # pnpm global store
+/home/agent/.agent-browser  # Agent-browser data (sessions, config)
 ```
+
+**Agent-Browser Support**: The mount point for `~/.agent-browser/` persists session state across container restarts. agent-browser itself is not baked into the image — it is installed at runtime via the `docker-agent-browser` skill from [github.com/shrwnsan/agents](https://github.com/shrwnsan/agents). This avoids ~300-400MB image bloat and works with any tool (Claude, OpenCode, Pi).
 
 ## Testing Status
 - Basic functionality verified (help command, shell mode)
@@ -136,6 +140,7 @@ The `agentbox` script has these key functions:
 - `detect_runtime()`: Detect available container runtime (Docker or Podman)
 - `check_runtime()`: Verify a container runtime is available
 - `calculate_hash()`: SHA256 hash for change detection
+- `calculate_combined_hash()`: Hash including build-affecting args (toolchain toggles)
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
 - `mount_additional_dirs()`: Mount extra directories with intuitive folder names (e.g., /foo, /bar)

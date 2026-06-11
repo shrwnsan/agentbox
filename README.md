@@ -4,6 +4,18 @@
 
 A container-based development environment for running agentic coding tools in a more safe, isolated fashion. This makes it less dangerous to give your agent full permissions (YOLO mode / `--dangerously-skip-permissions`), which is, in my opinion, the only way to use AI agents.
 
+## Fork Notes
+
+Branch strategy: `dev` = `upstream/main` + upstream PR branches + 1 fork-only squash.
+PR branches (`feat/agents-dir`, `fix/plugin-loading`, `feat/pi-agent`) track `upstream/main`.
+When upstream merges a PR, rebase the fork squash onto the new `upstream/main`.
+
+Fork customizations (single commit on top of upstream):
+- Optional toolchain build toggles (Java, OpenCode, GitLab CLI, Docker CLI) via env/CLI
+- Source `~/.agentbox/.env` before reading build arg defaults
+- `~/.agent-browser/` mount for session persistence
+- pnpm PATH, HOST_HOME env, privacy-safe path display
+
 ## Features
 
 - **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running your tool without a container.
@@ -239,6 +251,10 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 
 **Pi**:
 - `~/.pi` mounted at `/home/agent/.pi`
+
+### Agent-Browser
+
+`~/.agent-browser` is mounted at `/home/agent/.agent-browser` for session persistence. To use agent-browser in containers, install the [docker-agent-browser skill](https://github.com/shrwnsan/agents) — it handles npm install and system Chromium setup (including the Linux ARM64 workaround).
 
 ## Advanced Usage
 
