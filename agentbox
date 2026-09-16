@@ -438,7 +438,7 @@ run_container() {
         elif [[ "$tool" == "pi" ]]; then
             tool_cmd="pi"
         else
-            tool_cmd="claude --dangerously-skip-permissions"
+            tool_cmd="claude --dangerously-skip-permissions --settings /home/agent/.agentbox-claude-settings.json"
         fi
 
         if [[ ${#cmd_args[@]} -gt 0 ]]; then

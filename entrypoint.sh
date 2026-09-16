@@ -84,4 +84,13 @@ if [ -t 0 ] && [ -t 1 ]; then
     echo ""
 fi
 
+# Container-only claude settings override. The host settings enable the CC
+# sandbox with failIfUnavailable, but docker seccomp blocks bubblewrap's user
+# namespaces, so Claude Code refuses to start in the container. The container
+# itself is the isolation boundary — disable the inner sandbox here.
+# (See run_container in agentbox: tool_cmd passes --settings with this file.)
+if [ "${TOOL:-}" = "claude" ]; then
+    printf '{"sandbox": {"enabled": false}}\n' > "$HOME/.agentbox-claude-settings.json"
+fi
+
 exec "$@"
