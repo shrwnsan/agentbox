@@ -130,8 +130,16 @@ build_image() {
     local user_id=$(id -u)
     local group_id=$(id -g)
 
-    # Build with progress output
-    local build_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    # Timestamp granularity: explicit --rebuild uses seconds precision to
+    # cache-bust the tool install layers (fresh tool versions); automatic
+    # hash-triggered rebuilds use a daily UTC bucket so same-day rebuilds
+    # reuse those layers from cache.
+    local build_timestamp
+    if [[ "$force_rebuild" == "true" ]]; then
+        build_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    else
+        build_timestamp=$(date -u +%Y-%m-%d)
+    fi
     if $RUNTIME build \
         --build-arg USER_ID="${user_id}" \
         --build-arg GROUP_ID="${group_id}" \
