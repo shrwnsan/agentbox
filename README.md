@@ -163,6 +163,7 @@ The unified container image includes:
 - **Claude CLI**: Pre-installed with per-project authentication (via npm registry)
 - **OpenCode**: Pre-installed as an alternative AI coding tool (via npm registry)
 - **Pi**: Pre-installed (opt-in via `--tool pi`)
+- **agent-browser**: Browser automation CLI pre-installed (system Chromium installs on first use — see below)
 
 ## Authenticating to Git or other SCC Providers
 
@@ -254,7 +255,7 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 
 ### Agent-Browser
 
-`~/.agent-browser` is mounted at `/home/agent/.agent-browser` for session persistence. To use agent-browser in containers, install the [docker-agent-browser skill](https://github.com/shrwnsan/agents) — it handles npm install and system Chromium setup (including the Linux ARM64 workaround).
+`~/.agent-browser` is mounted at `/home/agent/.agent-browser` for session persistence. The `agent-browser` CLI is pre-installed; the system Chromium browser it drives is not in the image (Chrome for Testing has no Linux ARM64 builds). On first use in a fresh container, let the agent run the [docker-agent-browser skill](https://github.com/shrwnsan/agents) — it installs Chromium via apt (including the ARM64 workaround).
 
 ## Advanced Usage
 
