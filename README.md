@@ -160,8 +160,8 @@ The unified container image includes:
 - **Node.js**: Latest LTS via NVM with npm, yarn, and pnpm
 - **Java**: Latest LTS via SDKMAN with Gradle
 - **Shell**: Zsh (default) and Bash with common utilities
-- **Claude CLI**: Pre-installed with per-project authentication
-- **OpenCode**: Pre-installed as an alternative AI coding tool
+- **Claude CLI**: Pre-installed with per-project authentication (via npm registry)
+- **OpenCode**: Pre-installed as an alternative AI coding tool (via npm registry)
 - **Pi**: Pre-installed (opt-in via `--tool pi`)
 
 ## Authenticating to Git or other SCC Providers
