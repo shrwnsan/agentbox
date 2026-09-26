@@ -52,7 +52,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+# Installer downloads use --retry --retry-all-errors: single-attempt transfers
+# die mid-stream over flaky egress (curl 56).
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
     gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
     chmod 644 /usr/share/keyrings/githubcli-archive-keyring.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
@@ -65,9 +69,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
 # Install GitLab CLI (conditional)
 RUN if [ "$AGENTBOX_INCLUDE_GITLAB" = "true" ]; then \
         ARCH=$(dpkg --print-architecture) && \
-        GLAB_VERSION=$(curl -sL "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
+        GLAB_VERSION=$(curl -sL --retry 5 --retry-all-errors --retry-delay 2 "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
         echo "Installing glab version ${GLAB_VERSION} for ${ARCH}" && \
-        curl -fsSL -o /tmp/glab.deb \
+        curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 -o /tmp/glab.deb \
             "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
         dpkg -i /tmp/glab.deb || apt-get install -f -y && \
         rm /tmp/glab.deb && \
@@ -76,7 +80,7 @@ RUN if [ "$AGENTBOX_INCLUDE_GITLAB" = "true" ]; then \
 
 # Install Docker CLI (conditional)
 RUN if [ "$AGENTBOX_INCLUDE_DOCKER_CLI" = "true" ]; then \
-        curl -fsSL https://download.docker.com/linux/debian/gpg | \
+        curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 https://download.docker.com/linux/debian/gpg | \
         gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
         chmod 644 /usr/share/keyrings/docker-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
@@ -103,15 +107,18 @@ USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # Install uv for Python package management
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+RUN curl -LsSf --retry 5 --retry-all-errors --retry-delay 2 https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
 # Install Node.js via NVM
 ENV NVM_DIR="/home/${USERNAME}/.nvm"
-RUN NVM_VERSION=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
+# Cache node tarballs across builds; ownership guard as for the npm mounts.
+RUN --mount=type=cache,target=/home/agent/.nvm/.cache,sharing=locked \
+    sudo mkdir -p /home/agent/.nvm/.cache && sudo chown -R $(id -u):$(id -g) /home/agent/.nvm && \
+    NVM_VERSION=$(curl -s --retry 5 --retry-all-errors --retry-delay 2 https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
     echo "Installing nvm version ${NVM_VERSION}" && \
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash && \
+    curl -o- --retry 5 --retry-all-errors --retry-delay 2 https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
     nvm install --lts && \
     nvm alias default node && \
@@ -123,7 +130,11 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
 
 # Install Node.js global packages
-RUN bash -c "source $NVM_DIR/nvm.sh && \
+# BuildKit cache-mount roots land root-owned; npm (running as `agent`) cannot
+# mkdir inside — chown the mount before npm touches it. Guard repeated on every
+# npm cache-mount layer below.
+RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
+    bash -c "sudo mkdir -p /home/agent/.npm && sudo chown -R $(id -u):$(id -g) /home/agent/.npm && source $NVM_DIR/nvm.sh && \
     npm install -g \
         typescript \
         @types/node \
@@ -135,8 +146,12 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         pnpm"
 
 # Install SDKMAN for Java toolchain management (conditional)
-RUN if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then \
-        curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
+# Archives (downloaded JDK/Gradle zips) persist across builds; ownership guard
+# covers the installer, which creates ~/.sdkman after the mount is attached.
+RUN --mount=type=cache,target=/home/agent/.sdkman/archives,sharing=locked \
+    sudo mkdir -p /home/agent/.sdkman/archives && sudo chown -R $(id -u):$(id -g) /home/agent/.sdkman && \
+    if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then \
+        curl -s --retry 5 --retry-all-errors --retry-delay 2 "https://get.sdkman.io?rcupdate=false" | bash && \
         echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
         echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
         bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
@@ -154,7 +169,7 @@ RUN /home/${USERNAME}/.local/bin/uv tool install black && \
     /home/${USERNAME}/.local/bin/uv tool install pipenv
 
 # Install oh-my-zsh for better shell experience and setup NVM for zsh
-RUN sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
+RUN sh -c "$(wget -O- --tries=5 --timeout=30 https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
     sed -i 's/ZSH_THEME=".*"/ZSH_THEME="robbyrussell"/' ~/.zshrc && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && \
     echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
@@ -225,20 +240,46 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Set the user for runtime
 USER ${USERNAME}
 
-# Using BUILD_TIMESTAMP as a build arg that changes on every invocation invalidates
-# Docker's cache for this layer and following layers, forcing reinstall even when
-# Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
-# of relying on unpredictable auto-update timing.
+# BUILD_TIMESTAMP cache-busts the tool install layers below: seconds precision
+# on explicit --rebuild (fresh tool versions), daily UTC bucket on automatic
+# hash-triggered rebuilds (same-day rebuilds reuse these layers).
+# Value is computed in agentbox build_image().
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
+
+# npm defaults (2 retries, 300s per request) lose tarballs on slow/reset-prone
+# egress (ECONNRESET on ~40MB packages, 2026-09-17). Kept in the BUILD_TIMESTAMP
+# zone deliberately: an ENV change here invalidates every layer below it, so
+# placing it above the toolchain layers would discard their cache. The values
+# also apply to runtime npm installs in containers.
+ENV NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=600000
+
+# npm registry install — claude.ai/install.sh failed two ways over flaky egress
+# (curl 92 mid-stream during the ~150MB GCS transfer; regional geo-block pages).
+# npm retries internally. Same rationale as the opencode step below.
+RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
+    sudo mkdir -p /home/agent/.npm && sudo chown -R $(id -u):$(id -g) /home/agent/.npm && \
+    export NVM_DIR="/home/${USERNAME}/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    npm install -g @anthropic-ai/claude-code && \
     zsh -i -c 'which claude && claude --version'
 
-RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
-        curl -fsSL https://opencode.ai/install | bash && \
+# npm registry install — GitHub release CDN truncates large transfers over
+# flaky VPN egress (SSL_read: unexpected eof mid-download, 2026-09); npm unaffected
+RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
+    sudo mkdir -p /home/agent/.npm && sudo chown -R $(id -u):$(id -g) /home/agent/.npm && \
+    if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
+        export NVM_DIR="/home/${USERNAME}/.nvm" && \
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+        npm install -g opencode-ai && \
         zsh -i -c 'which opencode && opencode --version'; \
     fi
 
-RUN export NVM_DIR="/home/${USERNAME}/.nvm" && \
+RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
+    sudo mkdir -p /home/agent/.npm && sudo chown -R $(id -u):$(id -g) /home/agent/.npm && \
+    export NVM_DIR="/home/${USERNAME}/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
     npm install -g @earendil-works/pi-coding-agent && \
     zsh -i -c 'which pi && pi --version'
