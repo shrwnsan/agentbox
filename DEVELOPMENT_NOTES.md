@@ -34,7 +34,7 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 Automatic rebuilds are triggered by:
 1. **File changes**: SHA256 hash of Dockerfile + entrypoint.sh (+ toolchain toggles) stored as Docker image label. Compares on each run.
 
-Freshness comes from `BUILD_TIMESTAMP`, which cache-busts the tool install layers (claude, opencode, pi). Two granularities: explicit `--rebuild` uses a seconds-precision timestamp so it always re-resolves latest tool versions; automatic hash-triggered rebuilds use a daily UTC bucket, so several input changes on one day share the cached tool layers instead of re-downloading them each time. (The earlier 48-hour automatic rebuild trigger was removed upstream.)
+Freshness comes from `BUILD_TIMESTAMP`, which cache-busts the tool install layers (claude, opencode, pi, agent-browser). Two granularities: explicit `--rebuild` uses a seconds-precision timestamp so it always re-resolves latest tool versions; automatic hash-triggered rebuilds use a daily UTC bucket, so several input changes on one day share the cached tool layers instead of re-downloading them each time. (The earlier 48-hour automatic rebuild trigger was removed upstream.)
 
 ### Container Lifecycle
 1. Detect container runtime (Docker or Podman)
@@ -91,6 +91,8 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 /home/agent/.agent-browser  # Agent-browser data (sessions, config)
 ```
 
+**Agent-Browser Support**: The `agent-browser` CLI is baked into the image (BUILD_TIMESTAMP zone). Runtime npm installs kept failing mid-stream over flaky egress (same failure class as the opencode fix above), and Pi's `pi-agent-browser-native` package fails tools with `missing-binary` when the CLI is absent from PATH. The system Chromium browser it drives is still installed at runtime via the `docker-agent-browser` skill from [github.com/shrwnsan/agents](https://github.com/shrwnsan/agents) — Chrome for Testing has no Linux arm64 builds, and baking apt's ~400MB Chromium would defeat the image-size goal. The `~/.agent-browser/` mount persists session state across container restarts. Pi discovers the skill through a symlink in `~/.pi/agent/skills/` (Pi scans only that directory, not `~/.agents/skills/`).
+
 ## Testing Status
 - Basic functionality verified (help command, shell mode)
 - Full Docker build/run cycle needs real environment testing
@@ -127,7 +129,7 @@ Current image is large (~2GB) due to multiple language toolchains. Could optimiz
 ### Tool install downloads truncated mid-stream (curl 56)
 - **Root Cause**: `BUILD_TIMESTAMP` cache-busts the install layers on every rebuild; installer scripts download large release assets in a single attempt (no `--retry`/resume). The ~60MB opencode tarball from GitHub's release CDN died mid-stream (`SSL_read: unexpected eof`) over flaky VPN egress twice (2026-09-15/16).
 - **Fix**: opencode installs from the npm registry (`npm i -g opencode-ai`, matching the pi step) — npm retries internally and the registry path is unaffected. Same rationale as the host: the npm artifact is the known-good distribution.
-- **Status**: resolved for both tools. opencode → npm (2026-09). claude → npm (`@anthropic-ai/claude-code`, 2026-09-17) after the native installer failed two distinct ways within a day: curl 92 mid-stream during its internal ~150MB GCS binary transfer (~18 min wasted per attempt), and a geo-block "App unavailable in region" page when egress exited a region where claude.ai is unavailable. A bounded retry loop around install.sh was rejected: the fragile download is inside the installer, so each attempt re-fetches the full binary. All tool installs (claude, opencode, pi) share the resilient npm path in the BUILD_TIMESTAMP zone.
+- **Status**: resolved for both tools. opencode → npm (2026-09). claude → npm (`@anthropic-ai/claude-code`, 2026-09-17) after the native installer failed two distinct ways within a day: curl 92 mid-stream during its internal ~150MB GCS binary transfer (~18 min wasted per attempt), and a geo-block "App unavailable in region" page when egress exited a region where claude.ai is unavailable. A bounded retry loop around install.sh was rejected: the fragile download is inside the installer, so each attempt re-fetches the full binary. All four tool installs (claude, opencode, pi, agent-browser) now share the resilient npm path in the BUILD_TIMESTAMP zone.
 - **npm hardening (2026-09-17)**: the first npm-based rebuild died at the pi step with `ECONNRESET` — npm's defaults (2 fetch retries, 300s per request) cannot move ~40MB tarballs over ~90KB/s egress. Fix: `NPM_CONFIG_FETCH_*` ENVs (5 retries, 600s timeout, up to 120s backoff) plus `--mount=type=cache,target=/home/agent/.npm` on every npm RUN layer, mirroring the apt cache mounts, so tarballs persist across builds. The ENVs live in the BUILD_TIMESTAMP zone on purpose — an ENV change above the toolchain layers would invalidate their cache.
 - **npm cache mount ownership (2026-09-18)**: BuildKit cache-mount roots land root-owned, so npm running as `agent` died with `EACCES mkdir /home/agent/.npm/_cacache` (the apt cache mounts never hit this because apt runs as root). Fix: every npm cache-mount layer starts with `sudo mkdir -p + chown -R` on the mount before npm runs; it also heals cache state poisoned by earlier builds.
 

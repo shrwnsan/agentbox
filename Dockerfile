@@ -250,7 +250,8 @@ ARG BUILD_TIMESTAMP=unknown
 # egress (ECONNRESET on ~40MB packages, 2026-09-17). Kept in the BUILD_TIMESTAMP
 # zone deliberately: an ENV change here invalidates every layer below it, so
 # placing it above the toolchain layers would discard their cache. The values
-# also apply to runtime npm installs in containers.
+# also apply to runtime npm installs in containers (e.g. the
+# docker-agent-browser skill's npm step).
 ENV NPM_CONFIG_FETCH_RETRIES=5 \
     NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
     NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
@@ -283,6 +284,17 @@ RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
     npm install -g @earendil-works/pi-coding-agent && \
     zsh -i -c 'which pi && pi --version'
+
+# agent-browser CLI for browser automation. The system Chromium browser it drives
+# is installed at runtime (Chrome for Testing has no Linux arm64 builds) — see the
+# docker-agent-browser skill. CLI is baked so npm's ~119MB download happens at
+# build time, not per container session.
+RUN --mount=type=cache,target=/home/agent/.npm,sharing=locked \
+    sudo mkdir -p /home/agent/.npm && sudo chown -R $(id -u):$(id -g) /home/agent/.npm && \
+    export NVM_DIR="/home/${USERNAME}/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    npm install -g agent-browser && \
+    zsh -i -c 'which agent-browser && agent-browser --version'
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
