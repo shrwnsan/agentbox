@@ -150,7 +150,7 @@ build_image() {
         --build-arg AGENTBOX_INCLUDE_GITLAB="${include_gitlab}" \
         --build-arg AGENTBOX_INCLUDE_DOCKER_CLI="${include_docker_cli}" \
         --label "agentbox.hash=${combined_hash}" \
-        --label "agentbox.version=1.0.0" \
+        --label "agentbox.version=2.0.0" \
         --label "agentbox.built=${build_timestamp}" \
         -t "$IMAGE_NAME" \
         "$SCRIPT_DIR" ; then
