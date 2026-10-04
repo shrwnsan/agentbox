@@ -205,6 +205,8 @@ Environment variables are passed to the container from these sources, in order (
 
 `-e KEY` (without `=`) passes through `KEY` from the host environment. Use `-e KEY=VALUE` to inject secrets from a manager, e.g. `agentbox -e GH_TOKEN=$(op read 'op://vault/item/token')`.
 
+Every variable in `~/.agentbox/.env` is injected into every container. Containers need these variables for tool authentication, but treat a running container as having access to those credentials.
+
 `AGENTBOX_EXTRA_HOSTS` (in `~/.agentbox/.env`) injects entries into the container's `/etc/hosts` via Docker's `--add-host`. Useful when the container needs to reach host-tunneled services:
 
 ```bash
@@ -260,12 +262,13 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 ## Advanced Usage
 
 ### Running One-Off Commands
-If you need to run a single command in the containerized environment without starting Claude CLI or an interactive shell:
+Run a single command in the containerized environment without launching the AI tool:
 
 ```bash
-# Run any command
-agentbox npm test
+agentbox shell python script.py
 ```
+
+Everything after `shell` executes verbatim in the container. Positional arguments without `shell` are rejected — the AI tools would read them as prompts or flags (claude reads `-c` as `--continue`).
 
 ### Rebuild Control
 ```bash
@@ -275,7 +278,7 @@ agentbox --rebuild
 
 The image automatically rebuilds when:
 - Dockerfile or entrypoint.sh changes
-- Image is older than 48 hours (to get latest tool versions)
+- The build is older than the current UTC day (keeps tool versions fresh)
 
 ## Tool / Dependency Versions
 The Dockerfile is configured to pull the latest stable version of each tool (NVM, GitLab CLI, etc.) during the build process. This makes maintenance easy and ensures that we always use current software. It also means that rebuilding the container image may automatically result in newer versions of tools being installed, which could introduce unexpected behavior or breaking changes. If you require specific tool versions, consider pinning them in the Dockerfile.

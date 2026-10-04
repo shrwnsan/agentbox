@@ -166,6 +166,8 @@ The `agentbox` script has these key functions:
 
 5. **Admin Mode**: `--admin` flag doesn't actually grant sudo (would need Dockerfile changes) - currently just shows a message
 
+6. **Positional args rejected**: args without `shell` error out pre-flight instead of being appended to the tool CLI — the tools read them as prompts or flags (claude parses `-c` as `--continue`; incident 2026-10-02). `shell`/`ssh-init` are only recognized as the first positional so `agentbox foo shell` cannot silently mutate mode. The AI tools additionally require a TTY on stdin; scripted use goes through `agentbox shell <command>`, which drops `-t` when stdin/stdout is not a terminal.
+
 ## File Count
 - Core files: 3 (Dockerfile, entrypoint.sh, agentbox)
 - Documentation: 2 (README.md, DEVELOPMENT_NOTES.md)

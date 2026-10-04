@@ -525,8 +525,13 @@ run_container() {
         runtime_args+=(--userns=keep-id)
     fi
 
-    # Run ephemeral container with --rm
-    $RUNTIME run -it --rm \
+    # Run ephemeral container with --rm; -t only with a terminal on both ends so
+    # piped/scripted shell runs keep clean output
+    local run_flags=(-i)
+    if [[ -t 0 && ( "$shell_mode" == "false" || -t 1 ) ]]; then
+        run_flags=(-it)
+    fi
+    $RUNTIME run "${run_flags[@]}" --rm \
         --name "$container_name" \
         --hostname "agentbox-$PROJECT_NAME" \
         "${runtime_args[@]}" \
@@ -565,13 +570,13 @@ Options:
     --no-docker-cli             Exclude Docker CLI installation for smaller image (default: included)
 
 Commands:
-    shell [--admin]             Start interactive shell instead of Claude CLI
+    shell [--admin] [cmd...]    Run cmd inside the container instead of the AI tool
     ssh-init                    Initialize SSH directory for AgentBox
 
-    If no command is provided, Claude CLI will be started automatically.
-    Use 'shell' command to get a shell instead of Claude CLI.
-    Use 'shell --admin' to get a shell with sudo privileges.
-    Other commands will be executed inside the container.
+    With no command, the AI tool (claude by default) starts interactively.
+    Everything after 'shell' runs inside the container as-is; the AI tool is
+    not launched. Other positional arguments are rejected: the AI tools would
+    read them as prompts or flags (claude reads '-c' as --continue).
 
 Examples:
     agentbox                              # Start Claude CLI for current project
@@ -581,7 +586,7 @@ Examples:
     agentbox shell                        # Start interactive shell instead of Claude
     agentbox shell --admin                # Start admin shell with sudo access
     agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
-    agentbox python script.py             # Run Python script in container
+    agentbox shell python script.py       # Run Python script in container
     agentbox -e GH_TOKEN                  # Forward GH_TOKEN from host environment
     agentbox --rebuild                    # Force rebuild image
     agentbox ssh-init                     # Set up SSH for AgentBox
@@ -733,20 +738,31 @@ main() {
                 shift
                 ;;
             shell)
-                shell_mode=true
-                shift
-                # Check if next arg is --admin
-                if [[ "${1:-}" == "--admin" ]]; then
-                    admin_mode=true
+                if [[ ${#cmd_args[@]} -gt 0 ]]; then
+                    # Not first positional — "foo shell" must not silently become shell mode
+                    cmd_args+=("$1")
                     shift
+                else
+                    shell_mode=true
+                    shift
+                    # Check if next arg is --admin
+                    if [[ "${1:-}" == "--admin" ]]; then
+                        admin_mode=true
+                        shift
+                    fi
+                    # Remaining args become shell commands
+                    cmd_args+=("$@")
+                    break
                 fi
-                # Remaining args become shell commands
-                cmd_args=("$@")
-                break
                 ;;
             ssh-init)
-                ssh_setup
-                exit 0
+                if [[ ${#cmd_args[@]} -gt 0 ]]; then
+                    cmd_args+=("$1")
+                    shift
+                else
+                    ssh_setup
+                    exit 0
+                fi
                 ;;
             *)
                 cmd_args+=("$1")
@@ -758,6 +774,23 @@ main() {
     # Validate tool selection
     if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "pi" ]]; then
         log_error "Invalid tool: $tool (must be 'claude', 'opencode', or 'pi')"
+        exit 1
+    fi
+
+    # Positional args are never appended to the tool CLI: the tools would read
+    # them as prompts or flags (claude parses "-c" as --continue).
+    if [[ "$shell_mode" == "false" && ${#cmd_args[@]} -gt 0 ]]; then
+        log_error "Unrecognized argument: '${cmd_args[0]}'"
+        log_error "Positional arguments are rejected; agentbox only launches the ${tool} CLI."
+        log_error "To run a command in the container: agentbox shell <command>"
+        exit 1
+    fi
+
+    # The AI tools are interactive TUIs; without a terminal they die at docker
+    # attach or read piped stdin as a prompt. Fail before any build work.
+    if [[ "$shell_mode" == "false" && ! -t 0 ]]; then
+        log_error "The ${tool} CLI requires an interactive terminal."
+        log_error "For scripted use: agentbox shell <command>"
         exit 1
     fi
 
