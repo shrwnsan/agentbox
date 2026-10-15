@@ -111,9 +111,10 @@ AGENTBOX_TOOL=opencode agentbox
 # Show available commands
 agentbox --help
 
-# Non-agentbox CLI flags are passed through to claude.
-# For example, to continue the most recent session
-agentbox -c
+# Resume the tool's most recent session for this project
+# (claude/pi/opencode all take a literal --continue; random positional
+# args stay rejected — the tools would read them as prompts)
+agentbox --continue
 
 # Mount additional directories for multi-project access
 agentbox --add-dir ~/proj1 --add-dir ~/proj2
