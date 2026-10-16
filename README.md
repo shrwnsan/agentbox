@@ -10,6 +10,10 @@ Branch strategy: `dev` = `upstream/main` + upstream PR branches + 1 fork-only sq
 PR branches (`feat/agents-dir`, `fix/plugin-loading`, `feat/pi-agent`) track `upstream/main`.
 When upstream merges a PR, rebase the fork squash onto the new `upstream/main`.
 
+Fork `main` is a mirror of `upstream/main` — do not base PRs on it; the
+integration branch is `dev` (fork default). PRs based on `main` will drag
+in every unpushed dev commit.
+
 Fork customizations (single commit on top of upstream):
 - Optional toolchain build toggles (Java, OpenCode, GitLab CLI, Docker CLI) via env/CLI
 - Source `~/.agentbox/.env` before reading build arg defaults
