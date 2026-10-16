@@ -449,6 +449,13 @@ run_container() {
             tool_cmd="claude --dangerously-skip-permissions --settings /home/agent/.agentbox-claude-settings.json"
         fi
 
+        # Resume the tool's most recent session for this project instead of
+        # starting fresh (sessions live on the host store; the box mounts it).
+        # All three CLIs take a literal --continue.
+        if [[ "$tool_continue" == "true" ]]; then
+            tool_cmd+=" --continue"
+        fi
+
         if [[ ${#cmd_args[@]} -gt 0 ]]; then
             # Properly escape each argument to preserve quoting
             local escaped_args=""
@@ -568,6 +575,8 @@ Options:
     --no-opencode               Exclude OpenCode installation for smaller image (default: included)
     --no-gitlab                 Exclude GitLab CLI installation for smaller image (default: included)
     --no-docker-cli             Exclude Docker CLI installation for smaller image (default: included)
+    --continue                  Resume the tool's most recent session for this project
+                                (claude/pi/opencode all take a literal --continue)
 
 Commands:
     shell [--admin] [cmd...]    Run cmd inside the container instead of the AI tool
@@ -655,6 +664,7 @@ main() {
     local force_rebuild=false
     local shell_mode=false
     local admin_mode=false
+    local tool_continue=false
     local docker_mount=false
     local cmd_args=()
     declare -a ports=()
@@ -733,6 +743,10 @@ main() {
                 include_gitlab=false
                 shift
                 ;;
+            --continue)
+                tool_continue=true
+                shift
+                ;;
             --no-docker-cli)
                 include_docker_cli=false
                 shift
@@ -774,6 +788,12 @@ main() {
     # Validate tool selection
     if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "pi" ]]; then
         log_error "Invalid tool: $tool (must be 'claude', 'opencode', or 'pi')"
+        exit 1
+    fi
+
+    # Resume makes no sense for a shell — it belongs to the tool launch.
+    if [[ "$shell_mode" == "true" && "$tool_continue" == "true" ]]; then
+        log_error "--continue applies to the AI tool launch, not 'shell' mode."
         exit 1
     fi
 
